@@ -27,6 +27,10 @@ df = pd.read_csv(INPUT_CSV)
 print("Wczytano:", INPUT_CSV)
 print("Rozmiar:", df.shape)
 
+class_mapping = {1: "Adware", 2: "Banking", 3: "SMS", 4: "Riskware", 5: "Benign"}
+
+df["Class"] = df["Class"].map(class_mapping)
+
 print("Pierwsze 5 wierszy:\n", df.head())
 print("Typy danych:\n", df.dtypes)
 target_name = "Class" if "Class" in df.columns else df.columns[-1]
@@ -42,7 +46,7 @@ plt.ylabel("Liczność")
 ax.set_title("Rozkład liczności klass w zbiorze", fontsize=15)
 plt.savefig("class_distribution.png")
 
-corr_matrix = df.corr()
+corr_matrix = df.drop(columns=[target_name]).corr(numeric_only=True)
 plt.figure(figsize=(16, 12))
 sns.heatmap(corr_matrix, annot=False, fmt=".2f", linewidths=0.5, cmap="coolwarm")
 plt.title("Macierz korelacji")
@@ -55,9 +59,7 @@ y = df[target_name].values
 
 # ANOVA (f_classif)
 F, pvals = f_classif(X, y)
-anova_sorted = sorted(
-    zip(feature_cols, F, pvals), key=lambda x: -x[1]
-)
+anova_sorted = sorted(zip(feature_cols, F, pvals), key=lambda x: -x[1])
 
 chi_vals, chi_pvals = chi2(X, y)
 chi2_sorted = sorted(zip(feature_cols, chi_vals, chi_pvals), key=lambda x: -x[1])
@@ -141,10 +143,13 @@ plt.close()
 
 plt.figure(figsize=(6, 5))
 cm = results["raw"]["RandomForest"]["confusion_matrix"]
-sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+labels = sorted(df[target_name].unique())
+sns.heatmap(
+    cm, annot=True, fmt="d", cmap="Blues", xticklabels=labels, yticklabels=labels
+)
 plt.title("Macierz pomyłek - RandomForest (wszystkie cechy)")
-plt.ylabel("True")
-plt.xlabel("Predicted")
+plt.ylabel("Prawdziwa klasa")
+plt.xlabel("Prewidywana klasa")
 plt.tight_layout()
 plt.savefig("confusion_matrix_RF.png")
 plt.close()
