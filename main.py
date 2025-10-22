@@ -3,16 +3,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from glob import glob
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.feature_selection import f_classif, chi2
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
-from sklearn.neural_network import MLPClassifier
-from sklearn.feature_selection import f_classif, chi2
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 files = {
@@ -92,8 +88,8 @@ def plot_features_boxplots(df, feature_names, target_col, save_plots=True):
 top_anova_features = [feat for feat, _, _ in anova_sorted[:10]]
 top_chi2_features = [feat for feat, _, _ in chi2_sorted[:10]]
 
-plot_features_boxplots(df, top_anova_features, target_name)
-plot_features_boxplots(df, top_chi2_features, target_name)
+# plot_features_boxplots(df, top_anova_features, target_name)
+# plot_features_boxplots(df, top_chi2_features, target_name)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, stratify=y, test_size=0.2, random_state=42
@@ -104,6 +100,8 @@ X_test_std = scaler.transform(X_test)
 
 models = {
     "RandomForest": RandomForestClassifier(n_estimators=100, random_state=42),
+    "LogisticRegression": LogisticRegression(max_iter=1000, solver="lbfgs"),
+    "SVM": SVC(kernel="rbf", C=1.0, gamma="scale", probability=True),
 }
 
 dataset_versions = {
@@ -126,6 +124,22 @@ for setname, (Xtr, Xte) in dataset_versions.items():
             ),
             "confusion_matrix": confusion_matrix(y_test, y_pred),
         }
+        cm = confusion_matrix(y_test, y_pred)
+        plt.figure(figsize=(6, 5))
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            xticklabels=sorted(df[target_name].unique()),
+            yticklabels=sorted(df[target_name].unique()),
+        )
+        plt.title(f"Macierz pomyłek - {mname}")
+        plt.xlabel("Przewidywana klasa")
+        plt.ylabel("Prawdziwa klasa")
+        plt.tight_layout()
+        plt.savefig(f"confusion_matrix_{mname}_multiclass.png")
+        plt.close()
 
 rf = RandomForestClassifier(n_estimators=100, random_state=42)
 rf.fit(X_train_std, y_train)
@@ -141,17 +155,45 @@ plt.tight_layout()
 plt.savefig("feature_importance_RF.png")
 plt.close()
 
-plt.figure(figsize=(6, 5))
-cm = results["raw"]["RandomForest"]["confusion_matrix"]
-labels = sorted(df[target_name].unique())
-sns.heatmap(
-    cm, annot=True, fmt="d", cmap="Blues", xticklabels=labels, yticklabels=labels
+df["BinaryClass"] = df["Class"].apply(
+    lambda x: "Benign" if x == "Benign" else "Malware"
 )
-plt.title("Macierz pomyłek - RandomForest (wszystkie cechy)")
+
+print("\nRozkład klas binarnych:")
+print(df["BinaryClass"].value_counts())
+
+X = df[feature_cols].values
+y_bin = df["BinaryClass"].values
+
+X_train_b, X_test_b, y_train_b, y_test_b = train_test_split(
+    X, y_bin, stratify=y_bin, test_size=0.2, random_state=42
+)
+
+X_train_b_std = scaler.fit_transform(X_train_b)
+X_test_b_std = scaler.transform(X_test_b)
+
+rf_bin = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_bin.fit(X_train_b_std, y_train_b)
+y_pred_b = rf_bin.predict(X_test_b_std)
+
+print("\n=== Klasyfikacja binarna ===")
+print("Accuracy:", accuracy_score(y_test_b, y_pred_b))
+print(classification_report(y_test_b, y_pred_b, zero_division=0))
+
+cm_bin = confusion_matrix(y_test_b, y_pred_b)
+sns.heatmap(
+    cm_bin,
+    annot=True,
+    fmt="d",
+    cmap="Greens",
+    xticklabels=["Benign", "Malware"],
+    yticklabels=["Benign", "Malware"],
+)
+plt.title("Macierz pomyłek - klasyfikacja binarna (RandomForest)")
+plt.xlabel("Przewidywana klasa")
 plt.ylabel("Prawdziwa klasa")
-plt.xlabel("Prewidywana klasa")
 plt.tight_layout()
-plt.savefig("confusion_matrix_RF.png")
+plt.savefig("confusion_matrix_RF_binary.png")
 plt.close()
 
 for setname in results:
